@@ -1,9 +1,3 @@
-#!/usr/bin/env node
-// Starts the bot, handles permissions and chat context,
-// interprets commands and delegates the actual command
-// running to a Command instance. When started, an owner
-// ID should be given.
-
 var path = require("path");
 var fs = require("fs");
 var botgram = require("botgram");
@@ -45,28 +39,23 @@ function rootHook(msg, reply, next) {
   var id = msg.chat.id;
   var allowed = id === owner || granted[id];
 
-  // If this message contains a token, check it
   if (!allowed && msg.command === "start" && Object.hasOwnProperty.call(tokens, msg.args())) {
     var token = tokens[msg.args()];
     delete tokens[msg.args()];
     granted[id] = true;
     allowed = true;
 
-    // Notify owner
-    // FIXME: reply to token message
     var contents = (msg.user ? "User" : "Chat") + " <em>" + escapeHtml(msg.chat.name) + "</em>";
     if (msg.chat.username) contents += " (@" + escapeHtml(msg.chat.username) + ")";
     contents += " can now use the bot. To revoke, use:";
     reply.to(owner).html(contents).command("revoke", id);
   }
 
-  // If chat is not allowed, but user is, use its context
   if (!allowed && (msg.from.id === owner || granted[msg.from.id])) {
     id = msg.from.id;
     allowed = true;
   }
 
-  // Check that the chat is allowed
   if (!allowed) {
     if (msg.command === "start") reply.html("Not authorized to use this bot.");
     return;
@@ -89,8 +78,6 @@ function rootHook(msg, reply, next) {
 bot.all(rootHook);
 bot.edited.all(rootHook);
 
-
-// Replies
 bot.message(function (msg, reply, next) {
   if (msg.reply === undefined || msg.reply.from.id !== this.get("id")) return next();
   if (msg.file)
@@ -102,7 +89,6 @@ bot.message(function (msg, reply, next) {
   msg.context.command.handleReply(msg);
 });
 
-// Edits
 bot.edited.message(function (msg, reply, next) {
   if (msg.context.editor)
     return msg.context.editor.handleEdit(msg);
@@ -118,7 +104,6 @@ bot.command("r", function (msg, reply, next) {
   next();
 });
 
-// Signal sending
 bot.command("cancel", "kill", function (msg, reply, next) {
   var arg = msg.args(1)[0];
   if (!msg.context.command)
@@ -135,7 +120,6 @@ bot.command("cancel", "kill", function (msg, reply, next) {
   }
 });
 
-// Input sending
 bot.command("enter", "type", function (msg, reply, next) {
   var args = msg.args();
   if (!msg.context.command)
@@ -143,6 +127,7 @@ bot.command("enter", "type", function (msg, reply, next) {
   if (msg.command === "type" && !args) args = " ";
   msg.context.command.sendInput(args, msg.command === "type");
 });
+
 bot.command("control", function (msg, reply, next) {
   var arg = msg.args(1)[0];
   if (!msg.context.command)
@@ -152,6 +137,7 @@ bot.command("control", function (msg, reply, next) {
   var code = arg.toUpperCase().charCodeAt(0) - 0x40;
   msg.context.command.sendInput(String.fromCharCode(code), true);
 });
+
 bot.command("meta", function (msg, reply, next) {
   var arg = msg.args(1)[0];
   if (!msg.context.command)
@@ -167,7 +153,6 @@ bot.command("end", function (msg, reply, next) {
   msg.context.command.sendEof();
 });
 
-// Redraw
 bot.command("redraw", function (msg, reply, next) {
   if (!msg.context.command)
     return reply.html("No command is running.");
@@ -195,7 +180,6 @@ bot.command("run", function (msg, reply, next) {
   });
 });
 
-// Editor start
 bot.command("file", function (msg, reply, next) {
   var args = msg.args();
   if (!args)
@@ -217,7 +201,6 @@ bot.command("file", function (msg, reply, next) {
   }
 });
 
-// Keypad
 bot.command("keypad", function (msg, reply, next) {
   if (!msg.context.command)
     return reply.html("No command is running.");
@@ -228,7 +211,6 @@ bot.command("keypad", function (msg, reply, next) {
   }
 });
 
-// File upload / download
 bot.command("upload", function (msg, reply, next) {
   var args = msg.args();
   if (!args)
@@ -241,7 +223,6 @@ bot.command("upload", function (msg, reply, next) {
     return reply.html("Couldn't open file: %s", e.message);
   }
 
-  // Catch errors but do nothing, they'll be propagated to the handler below
   stream.on("error", function (e) {});
 
   reply.action("upload_document").document(stream).then(function (e, msg) {
@@ -273,16 +254,13 @@ function handleDownload(msg, reply) {
   });
 }
 
-// Status
 bot.command("status", function (msg, reply, next) {
   var content = "", context = msg.context;
 
-  // Running command
   if (context.editor) content += "Editing file: " + escapeHtml(context.editor.file) + "\n\n";
   else if (!context.command) content += "No command running.\n\n";
   else content += "Command running, PID "+context.command.pty.pid+".\n\n";
 
-  // Chat settings
   content += "Shell: " + escapeHtml(context.shell) + "\n";
   content += "Size: " + context.size.columns + "x" + context.size.rows + "\n";
   content += "Directory: " + escapeHtml(context.cwd) + "\n";
@@ -293,7 +271,6 @@ bot.command("status", function (msg, reply, next) {
   if (uid !== gid) uid = uid + "/" + gid;
   content += "UID/GID: " + uid + "\n";
 
-  // Granted chats (msg.chat.id is intentional)
   if (msg.chat.id === owner) {
     var grantedIds = Object.keys(granted);
     if (grantedIds.length) {
@@ -308,7 +285,6 @@ bot.command("status", function (msg, reply, next) {
   reply.html(content);
 });
 
-// Settings: Shell
 bot.command("shell", function (msg, reply, next) {
   var arg = msg.args(1)[0];
   if (arg) {
@@ -336,7 +312,6 @@ bot.command("shell", function (msg, reply, next) {
   }
 });
 
-// Settings: Working dir
 bot.command("cd", function (msg, reply, next) {
   var arg = msg.args(1)[0];
   if (arg) {
@@ -358,7 +333,6 @@ bot.command("cd", function (msg, reply, next) {
   });
 });
 
-// Settings: Environment
 bot.command("env", function (msg, reply, next) {
   var env = msg.context.env, key = msg.args();
   if (!key)
@@ -388,7 +362,6 @@ bot.command("env", function (msg, reply, next) {
   }
 });
 
-// Settings: Size
 bot.command("resize", function (msg, reply, next) {
   var arg = msg.args(1)[0] || "";
   var match = /(\d+)\s*((\sby\s)|x|\s|,|;)\s*(\d+)/i.exec(arg.trim());
@@ -463,7 +436,6 @@ bot.command("token", function (msg, reply, next) {
   reply.command(true, "start", token);
 });
 
-// Welcome message, help
 bot.command("start", function (msg, reply, next) {
   if (msg.args() && msg.context.id === owner && Object.hasOwnProperty.call(tokens, msg.args())) {
     reply.html("You were already authenticated; the token has been revoked.");
@@ -500,12 +472,6 @@ bot.command("help", function (msg, reply, next) {
     "message. This also allows you to edit the file, but you have to know how..."
   );
 });
-
-// FIXME: add inline bot capabilities!
-// FIXME: possible feature: restrict chats to UIDs
-// FIXME: persistence
-// FIXME: shape messages so we don't hit limits, and react correctly when we do
-
 
 bot.command(function (msg, reply, next) {
   reply.reply(msg).text("Invalid command.");
